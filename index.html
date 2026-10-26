@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#F2ECDF">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+</head>
+<body>
+<title>Temps de jeu D1</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Playfair+Display:wght@800&display=swap">
+<style>
+/* Bord de terrain, une main : chrono collé en haut, grille de joueurs en gros boutons, actions rares en bas. Charte du rapport D1 (crème, noir, rouge). */
+:root{
+  --bg:#F2ECDF; --paper:#FBF8F1; --ink:#141210; --muted:#6B6357; --line:#D8CEBC;
+  --red:#C8102E; --go:#1D7A45; --on-accent:#FFFFFF;
+  --f-ui:"Poppins",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-title:"Playfair Display",Georgia,"Times New Roman",serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12110F; --paper:#1D1B18; --ink:#F2ECDF; --muted:#A49B8C; --line:#3A352E;
+  --red:#E5484D; --go:#2E9F5C; --on-accent:#FFFFFF; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12110F; --paper:#1D1B18; --ink:#F2ECDF; --muted:#A49B8C; --line:#3A352E;
+  --red:#E5484D; --go:#2E9F5C; --on-accent:#FFFFFF; color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:16px;
+  -webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+input,select,textarea{-webkit-user-select:text;user-select:text}
+.wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 32px}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;touch-action:manipulation}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+.kicker{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--red)}
+h1{font-family:var(--f-title);font-size:30px;line-height:1.1;margin:4px 0 14px;text-wrap:balance}
+h2{font-size:15px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:0 0 10px;padding-bottom:6px;border-bottom:2px solid var(--ink)}
+.block{display:flex;flex-direction:column;gap:10px;margin-top:22px}
+.muted{color:var(--muted);font-size:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{min-height:52px;padding:0 18px;border-radius:12px;font-weight:700;font-size:16px;background:var(--paper);border:2px solid var(--ink)}
+.btn.primary{background:var(--ink);color:var(--bg)}
+.btn.full{width:100%}
+.btn.armed{background:var(--red);border-color:var(--red);color:var(--on-accent)}
+.btn:disabled{opacity:.4}
+.field{display:flex;flex-direction:column;gap:4px;flex:1 1 140px;min-width:0}
+.field label{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.field input,.field select{min-height:48px;border-radius:10px;border:2px solid var(--line);background:var(--paper);color:var(--ink);font:inherit;padding:0 12px;width:100%}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{min-height:44px;padding:0 16px;border-radius:999px;border:2px solid var(--ink);font-weight:600;background:var(--paper)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.file{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+
+/* Liste effectif (préparation) */
+.roster{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.rline{display:grid;grid-template-columns:48px 44px 1fr auto;align-items:center;gap:8px;min-height:52px;border-bottom:1px solid var(--line)}
+.rline .ck{width:44px;height:44px;border-radius:10px;border:2px solid var(--ink);display:grid;place-items:center;font-weight:800}
+.rline .ck[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.rline .n{font-weight:800;font-variant-numeric:tabular-nums;text-align:center}
+.rline .nm{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rline .del{width:44px;height:44px;color:var(--muted);font-size:22px}
+.rline.off .n,.rline.off .nm{opacity:.4}
+.gk{display:inline-block;font-size:11px;font-weight:800;padding:2px 6px;border-radius:6px;background:var(--red);color:var(--on-accent);vertical-align:middle;margin-left:6px}
+
+/* Écran match */
+.clockbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:8px 10px;border-bottom:2px solid var(--ink)}
+.cb-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.mt{font-weight:800;font-size:14px;letter-spacing:.1em;text-transform:uppercase}
+.vs{font-size:13px;color:var(--muted);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cb-mid{display:flex;align-items:center;gap:12px;margin-top:2px}
+.clock{font-size:64px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.clock.run{color:var(--go)}
+.side{display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--muted);font-weight:600;font-variant-numeric:tabular-nums}
+.side b{color:var(--ink);font-size:18px}
+.go{margin-top:10px;width:100%;min-height:64px;border-radius:14px;font-size:22px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:var(--go);color:var(--on-accent)}
+.go.stop{background:var(--red)}
+.adj{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
+.adj button{min-height:40px;border-radius:10px;border:2px solid var(--line);font-weight:700;font-variant-numeric:tabular-nums;background:var(--paper)}
+
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+@media (min-width:560px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.tile{min-height:96px;border-radius:14px;border:2px solid var(--ink);background:var(--paper);padding:10px 12px;display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:10px;align-items:center;text-align:left}
+.tile .num{grid-row:1 / span 2;font-size:34px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1;min-width:1.4em;text-align:center}
+.tile .nom{font-weight:700;font-size:15px;line-height:1.15;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile .tps{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted)}
+.tile[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tile[aria-pressed="true"] .tps{color:var(--bg)}
+.tile[aria-pressed="true"].live .tps::after{content:" ●";color:var(--go);font-size:14px;vertical-align:middle}
+.tile:disabled{opacity:.5}
+
+.foot{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:18px}
+.foot .wide{grid-column:1 / -1}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-weight:600;font-size:15px;z-index:20;max-width:calc(100% - 32px);text-align:center}
+
+/* Récap fin */
+.tbl{overflow-x:auto;border-top:2px solid var(--ink)}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+td.r,th.r{text-align:right}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<!-- ========== PRÉPARATION ========== -->
+<section id="v-setup">
+  <div class="kicker">D1 Futsal · Temps de jeu</div>
+  <h1>Préparer le match</h1>
+
+  <div id="resume" class="block" hidden>
+    <button class="btn primary full" id="b-resume">Reprendre le match en cours</button>
+  </div>
+
+  <div class="block">
+    <h2>Effectif</h2>
+    <label class="btn full file" for="f-compo">Importer la compo (.xlsx)
+      <input type="file" id="f-compo" accept=".xlsx,.xls">
+    </label>
+    <div id="sheets" class="chips" hidden></div>
+    <p class="muted" id="roster-info">Aucun effectif. Importe ta compo ou ajoute les joueurs à la main.</p>
+    <div class="roster" id="roster"></div>
+    <div class="row">
+      <div class="field" style="flex:0 0 76px"><label for="i-num">N°</label><input id="i-num" inputmode="numeric" maxlength="3"></div>
+      <div class="field"><label for="i-nom">Nom</label><input id="i-nom" autocapitalize="characters"></div>
+      <button class="chip" id="i-gk" aria-pressed="false" style="align-self:flex-end">Gardien</button>
+    </div>
+    <button class="btn full" id="b-add">Ajouter le joueur</button>
+  </div>
+
+  <div class="block">
+    <h2>Match</h2>
+    <div class="row">
+      <div class="field"><label for="i-adv">Adversaire</label><input id="i-adv" autocapitalize="characters"></div>
+      <div class="field" style="flex:0 0 96px"><label for="i-j">Journée</label><input id="i-j" inputmode="numeric" maxlength="2"></div>
+    </div>
+    <div class="chips" id="lieu">
+      <button class="chip" data-v="dom" aria-pressed="true">Domicile</button>
+      <button class="chip" data-v="ext" aria-pressed="false">Extérieur</button>
+    </div>
+  </div>
+
+  <div class="block">
+    <button class="btn primary full" id="b-go">Aller au match</button>
+    <p class="muted">Les joueurs cochés apparaissent sur l'écran match. Tu choisis les titulaires là-bas, juste avant le coup d'envoi.</p>
+  </div>
+</section>
+
+<!-- ========== MATCH ========== -->
+<section id="v-match" hidden>
+  <div class="clockbar">
+    <div class="cb-top"><span class="mt" id="m-half">1re MT</span><span class="vs" id="m-vs"></span></div>
+    <div class="cb-mid">
+      <div class="clock" id="m-clock">20:00</div>
+      <div class="side"><span>min. de jeu <b id="m-min">00:00</b></span><span>sur le terrain <b id="m-on">0</b></span></div>
+    </div>
+    <button class="go" id="b-go-stop">Démarrer</button>
+    <div class="adj" id="adj">
+      <button data-d="-10000">−10 s</button><button data-d="-1000">−1 s</button>
+      <button data-d="1000">+1 s</button><button data-d="10000">+10 s</button>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="foot">
+    <button class="btn" id="b-undo">Annuler dernier clic</button>
+    <button class="btn" id="b-export">Export</button>
+    <button class="btn wide" id="b-half">Fin de la 1re MT</button>
+    <button class="btn wide" id="b-back" hidden>Retour à la préparation</button>
+  </div>
+</section>
+
+<!-- ========== EXPORT ========== -->
+<section id="v-fin" hidden>
+  <div class="kicker" id="f-kicker">Fin de match</div>
+  <h1 id="f-title">Temps de jeu</h1>
+  <div class="tbl"><table id="f-table"></table></div>
+  <div class="block">
+    <button class="btn primary full" id="b-xlsx">Télécharger le fichier xlsx</button>
+    <button class="btn full" id="b-csv">Télécharger en CSV</button>
+    <button class="btn full" id="b-copy">Copier les tableaux (coller dans LibreOffice)</button>
+    <p class="muted" id="f-note"></p>
+  </div>
+  <div class="block">
+    <button class="btn full" id="b-return">Retour au match</button>
+    <button class="btn full" id="b-new">Nouveau match (garde l'effectif)</button>
+  </div>
+</section>
+
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* ================================================================
+   Temps de jeu D1 Futsal
+   Principe : tout est rejoué depuis un journal d'événements horodatés
+   en temps de jeu (ms écoulées dans la MT). Le chrono général se calcule
+   à partir de l'heure réelle (Date.now), donc il reste juste après une
+   mise en veille ou un rechargement. Sauvegarde à chaque action.
+   ================================================================ */
+const HALF = 20 * 60 * 1000;               // durée d'une MT en ms
+const KEY_MATCH = 'tdj_match_v1';
+const KEY_ROSTER = 'tdj_roster_v1';
+const $ = id => document.getElementById(id);
+
+// ---------- stockage (protégé : le navigateur peut refuser) ----------
+function lsGet(k){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; }catch(e){ return null; } }
+function lsSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+
+function newMatch(){
+  return { screen:'setup', adv:'', journee:'', lieu:'dom', date:new Date().toISOString().slice(0,10),
+           team:'', players:[], half:1, running:false, base:0, startedAt:0, events:[], finished:false };
+}
+let R = lsGet(KEY_ROSTER) || { team:'', players:[] };   // effectif mémorisé d'un match à l'autre
+let S = lsGet(KEY_MATCH) || newMatch();                  // match en cours
+let workbook = null;
+const save = () => lsSet(KEY_MATCH, S);
+const saveRoster = () => lsSet(KEY_ROSTER, R);
+
+// ---------- temps ----------
+function elapsed(){ return S.running ? Math.min(HALF, S.base + Date.now() - S.startedAt) : S.base; }
+const pad = n => String(n).padStart(2,'0');
+function fmt(ms){ const s = Math.max(0, Math.floor(ms/1000)); return pad(Math.floor(s/60)) + ':' + pad(s%60); }
+function fmtDown(ms){ const s = Math.max(0, Math.ceil((HALF-ms)/1000)); return pad(Math.floor(s/60)) + ':' + pad(s%60); }
+const absMs = (half, t) => (half-1)*HALF + t;            // minute de jeu 0-40
+
+// ---------- état dérivé du journal ----------
+function isOn(pid){
+  for (let i = S.events.length-1; i >= 0; i--){
+    const e = S.events[i];
+    if (e.half !== S.half) continue;
+    if (e.pid === pid) return e.type === 'in';
+  }
+  return false;
+}
+function playerTimes(pid){
+  const res = {1:0, 2:0};
+  for (const h of [1,2]){
+    let open = null;
+    for (const e of S.events){
+      if (e.pid !== pid || e.half !== h) continue;
+      if (e.type === 'in') open = e.t;
+      else if (e.type === 'out' && open !== null){ res[h] += Math.max(0, e.t - open); open = null; }
+    }
+    if (open !== null) res[h] += Math.max(0, (h === S.half ? elapsed() : HALF) - open);
+  }
+  return res;
+}
+const playerById = pid => S.players.find(p => p.id === pid);
+const code = p => p.num + '.' + p.nom;
+
+// ---------- actions ----------
+function push(e){ S.events.push(Object.assign({ half:S.half, t:elapsed(), at:Date.now() }, e)); save(); }
+
+function startStop(){
+  if (S.finished) return;
+  if (S.running){
+    const t = elapsed(); S.base = t; S.running = false; push({ type:'stop', t });
+  } else {
+    if (S.base >= HALF){ toast('MT terminée : passe à la suite'); return; }
+    S.startedAt = Date.now(); S.running = true; push({ type:'start' });
+    keepAwake();
+  }
+  vibrate(40); renderMatch();
+}
+
+let lastTap = { pid:null, at:0 };
+function togglePlayer(pid){
+  if (S.finished) return;
+  const now = Date.now();
+  if (lastTap.pid === pid && now - lastTap.at < 400) return;   // anti double-tap involontaire
+  lastTap = { pid, at:now };
+  push({ type: isOn(pid) ? 'out' : 'in', pid });
+  vibrate(25); renderMatch();
+}
+
+function adjust(delta){
+  const t = Math.min(HALF, Math.max(0, elapsed() + delta));
+  S.base = t; if (S.running) S.startedAt = Date.now();
+  push({ type:'adjust', t, delta });
+  renderMatch();
+}
+
+function undo(){
+  for (let i = S.events.length-1; i >= 0; i--){
+    const e = S.events[i];
+    if (e.half !== S.half) break;
+    if (e.type === 'in' || e.type === 'out'){
+      S.events.splice(i,1); save();
+      const p = playerById(e.pid);
+      toast('Annulé : ' + (e.type === 'in' ? 'entrée' : 'sortie') + ' de ' + (p ? code(p) : '?'));
+      renderMatch(); return;
+    }
+  }
+  toast('Rien à annuler sur cette MT');
+}
+
+function endHalf(){
+  if (S.running){ const t = elapsed(); S.base = t; S.running = false; push({ type:'stop', t }); }
+  const t = elapsed();
+  for (const p of S.players) if (isOn(p.id)) S.events.push({ type:'out', pid:p.id, half:S.half, t, at:Date.now(), auto:true });
+  S.events.push({ type: S.half === 1 ? 'halftime' : 'end', half:S.half, t, at:Date.now() });
+  if (S.half === 1){ S.half = 2; S.base = 0; toast('2e MT : sélectionne les 5 sur le terrain'); }
+  else { S.finished = true; S.screen = 'fin'; }
+  save(); render();
+}
+
+// ---------- confirmation en 2 temps (pas de boîte de dialogue) ----------
+function armed(btn, label, fn){
+  if (btn.dataset.armed){ clearTimeout(+btn.dataset.armed); delete btn.dataset.armed; btn.classList.remove('armed'); fn(); return; }
+  const old = btn.textContent;
+  btn.textContent = label; btn.classList.add('armed');
+  btn.dataset.armed = setTimeout(() => { btn.textContent = old; btn.classList.remove('armed'); delete btn.dataset.armed; }, 3000);
+}
+
+// ---------- confort ----------
+let wake = null;
+async function keepAwake(){
+  try{ if ('wakeLock' in navigator && !wake){ wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => wake = null); } }catch(e){}
+}
+function vibrate(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} }
+let toastT;
+function toast(msg){ const el = $('toast'); el.textContent = msg; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => el.hidden = true, 2200); }
+
+// ================= PRÉPARATION =================
+function parseCompo(ws){
+  const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:null });
+  const h = rows.findIndex(r => r && String(r[0] ?? '').trim().toLowerCase() === 'nom');
+  if (h < 0) throw new Error('Ligne d\'en-tête « Nom » introuvable');
+  const hdr = rows[h].map(x => String(x ?? '').trim().toLowerCase());
+  const iG = hdr.findIndex(x => x.startsWith('gardien')), iN = hdr.findIndex(x => x.startsWith('num'));
+  const out = [];
+  for (const r of rows.slice(h+1)){
+    const nom = r && r[0] != null ? String(r[0]).trim().toUpperCase() : '';
+    if (!nom) continue;
+    const num = iN >= 0 && r[iN] != null ? String(r[iN]).trim() : '';
+    const gk = iG >= 0 && String(r[iG] ?? '').trim().toUpperCase() === 'OUI';
+    out.push({ id: num + '_' + nom, num, nom, gk, sel:true });
+  }
+  return out;
+}
+
+$('f-compo').addEventListener('change', async ev => {
+  const f = ev.target.files[0]; if (!f) return;
+  if (typeof XLSX === 'undefined'){ toast('Lecture xlsx indisponible hors connexion. Ajoute les joueurs à la main.'); return; }
+  try{
+    workbook = XLSX.read(await f.arrayBuffer(), { type:'array' });
+    const box = $('sheets'); box.innerHTML = '';
+    for (const name of workbook.SheetNames){
+      const b = document.createElement('button');
+      b.className = 'chip'; b.textContent = name.trim(); b.setAttribute('aria-pressed', String(name.trim() === R.team));
+      b.onclick = () => pickTeam(name);
+      box.appendChild(b);
+    }
+    box.hidden = false; toast('Choisis l\'équipe suivie');
+  }catch(e){ toast('Fichier illisible : ' + e.message); }
+  ev.target.value = '';
+});
+
+function pickTeam(name){
+  try{
+    R = { team: name.trim(), players: sortPlayers(parseCompo(workbook.Sheets[name])) };
+    saveRoster(); $('sheets').hidden = true; renderSetup();
+  }catch(e){ toast(e.message); }
+}
+function sortPlayers(ps){ return ps.slice().sort((a,b) => (b.gk - a.gk) || ((+a.num||999) - (+b.num||999))); }
+
+function renderSetup(){
+  $('resume').hidden = !(S.events.length && !S.finished);
+  $('roster-info').textContent = R.players.length
+    ? R.team + ' · ' + R.players.filter(p => p.sel).length + ' joueurs cochés sur ' + R.players.length
+    : 'Aucun effectif. Importe ta compo ou ajoute les joueurs à la main.';
+  const box = $('roster'); box.innerHTML = '';
+  R.players.forEach((p, i) => {
+    const line = document.createElement('div'); line.className = 'rline' + (p.sel ? '' : ' off');
+    line.innerHTML = `<button class="ck" aria-pressed="${p.sel}" aria-label="Sur la feuille de match">${p.sel ? '✓' : ''}</button>
+      <span class="n">${esc(p.num)}</span><span class="nm">${esc(p.nom)}${p.gk ? '<span class="gk">G</span>' : ''}</span>
+      <button class="del" aria-label="Retirer">×</button>`;
+    line.querySelector('.ck').onclick = () => { p.sel = !p.sel; saveRoster(); renderSetup(); };
+    line.querySelector('.del').onclick = e => armed(e.currentTarget, '?', () => { R.players.splice(i,1); saveRoster(); renderSetup(); });
+    box.appendChild(line);
+  });
+  $('i-adv').value = S.adv; $('i-j').value = S.journee;
+  for (const b of $('lieu').children) b.setAttribute('aria-pressed', String(b.dataset.v === S.lieu));
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+$('i-gk').onclick = e => { const b = e.currentTarget; b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true')); };
+$('b-add').onclick = () => {
+  const num = $('i-num').value.trim(), nom = $('i-nom').value.trim().toUpperCase();
+  if (!nom){ toast('Indique au moins un nom'); return; }
+  const gk = $('i-gk').getAttribute('aria-pressed') === 'true';
+  if (R.players.some(p => p.id === num + '_' + nom)){ toast('Joueur déjà dans la liste'); return; }
+  R.players = sortPlayers(R.players.concat({ id:num + '_' + nom, num, nom, gk, sel:true }));
+  if (!R.team) R.team = 'MON ÉQUIPE';
+  saveRoster(); $('i-num').value = ''; $('i-nom').value = ''; $('i-gk').setAttribute('aria-pressed','false'); renderSetup();
+};
+$('i-adv').oninput = e => { S.adv = e.target.value.trim().toUpperCase(); save(); };
+$('i-j').oninput = e => { S.journee = e.target.value.trim(); save(); };
+$('lieu').onclick = e => { const b = e.target.closest('.chip'); if (!b) return; S.lieu = b.dataset.v; save(); renderSetup(); };
+
+$('b-go').onclick = () => {
+  const sel = R.players.filter(p => p.sel);
+  if (!sel.length){ toast('Coche au moins un joueur'); return; }
+  if (!S.events.length){ S.players = sel.map(({sel, ...p}) => p); S.team = R.team; }
+  S.screen = 'match'; save(); render();
+};
+$('b-resume').onclick = () => { S.screen = 'match'; save(); render(); };
+
+// ================= MATCH =================
+function buildGrid(){
+  const g = $('grid'); g.innerHTML = '';
+  for (const p of S.players){
+    const b = document.createElement('button');
+    b.className = 'tile'; b.dataset.pid = p.id;
+    b.innerHTML = `<span class="num">${esc(p.num)}</span><span class="nom">${esc(p.nom)}${p.gk ? '<span class="gk">G</span>' : ''}</span><span class="tps">00:00</span>`;
+    b.onclick = () => togglePlayer(p.id);
+    g.appendChild(b);
+  }
+}
+function renderMatch(){
+  const t = elapsed();
+  $('m-half').textContent = (S.half === 1 ? '1re' : '2e') + ' MT' + (S.finished ? ' · terminé' : '');
+  $('m-vs').textContent = S.team + (S.adv ? ' – ' + S.adv : '');
+  const c = $('m-clock'); c.textContent = fmtDown(t); c.classList.toggle('run', S.running);
+  $('m-min').textContent = fmt(absMs(S.half, t));
+  const go = $('b-go-stop');
+  go.textContent = S.running ? 'Arrêter' : (t >= HALF ? 'MT terminée' : (t > 0 ? 'Reprendre' : 'Démarrer'));
+  go.classList.toggle('stop', S.running); go.disabled = S.finished || (!S.running && t >= HALF);
+  let on = 0;
+  for (const b of $('grid').children){
+    const pid = b.dataset.pid, o = isOn(pid), pt = playerTimes(pid);
+    if (o) on++;
+    b.setAttribute('aria-pressed', String(o));
+    b.classList.toggle('live', o && S.running);
+    b.disabled = S.finished;
+    b.querySelector('.tps').textContent = fmt(pt[1] + pt[2]);
+  }
+  $('m-on').textContent = on;
+  const bh = $('b-half');
+  if (!bh.dataset.armed) bh.textContent = S.half === 1 ? 'Fin de la 1re MT' : 'Fin du match';
+  bh.disabled = S.finished;
+  $('b-back').hidden = S.events.some(e => e.type === 'start' || e.type === 'in');
+}
+
+$('b-go-stop').onclick = startStop;
+$('adj').onclick = e => { const b = e.target.closest('button'); if (b) adjust(+b.dataset.d); };
+$('b-undo').onclick = undo;
+$('b-half').onclick = e => armed(e.currentTarget, S.half === 1 ? 'Confirmer la fin de MT' : 'Confirmer la fin du match', endHalf);
+$('b-export').onclick = () => { S.screen = 'fin'; save(); render(); };
+$('b-back').onclick = () => { S.screen = 'setup'; save(); render(); };
+
+// ================= EXPORT =================
+function tables(){
+  const recap = [['Numéro','Nom','Code','Gardien','Temps 1re MT','Temps 2e MT','Temps total','Total (s)','Entrées','Titulaire']];
+  for (const p of S.players){
+    const pt = playerTimes(p.id);
+    const ins = S.events.filter(e => e.pid === p.id && e.type === 'in');
+    const tit = ins.some(e => e.half === 1 && e.t === 0);
+    recap.push([p.num, p.nom, code(p), p.gk ? 'OUI' : 'NON', fmt(pt[1]), fmt(pt[2]), fmt(pt[1]+pt[2]), Math.round((pt[1]+pt[2])/1000), ins.length, tit ? 'OUI' : 'NON']);
+  }
+  const mv = [['Ordre','MT','Chrono affiché','Minute de jeu','Seconde de jeu','Numéro','Nom','Code','Mouvement']];
+  let k = 0;
+  for (const e of S.events){
+    if (e.type !== 'in' && e.type !== 'out') continue;
+    const p = playerById(e.pid); if (!p) continue;
+    const a = absMs(e.half, e.t);
+    mv.push([++k, e.half, fmtDown(e.t), fmt(a), Math.round(a/1000), p.num, p.nom, code(p), e.type === 'in' ? 'Entrée' : (e.auto ? 'Sortie (fin de MT)' : 'Sortie')]);
+  }
+  const info = [['Équipe', S.team], ['Adversaire', S.adv], ['Lieu', S.lieu === 'dom' ? 'Domicile' : 'Extérieur'], ['Journée', S.journee], ['Date', S.date]];
+  return { recap, mv, info };
+}
+function fileBase(){
+  const j = S.journee ? 'J' + pad(S.journee) + '_' : '';
+  const teams = S.lieu === 'dom' ? [S.team, S.adv] : [S.adv, S.team];
+  return 'TJ_' + j + teams.filter(Boolean).join('-').replace(/\s+/g,'') ;
+}
+function download(blob, name){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+$('b-xlsx').onclick = () => {
+  if (typeof XLSX === 'undefined'){ toast('Module xlsx non chargé : utilise le CSV'); return; }
+  const { recap, mv, info } = tables(), wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.aoa_to_sheet(recap); ws1['!cols'] = [6,18,22,8,12,12,12,10,8,9].map(w => ({ wch:w }));
+  const ws2 = XLSX.utils.aoa_to_sheet(mv);    ws2['!cols'] = [6,4,13,13,13,7,18,22,18].map(w => ({ wch:w }));
+  XLSX.utils.book_append_sheet(wb, ws1, 'Temps de jeu');
+  XLSX.utils.book_append_sheet(wb, ws2, 'Entrées-Sorties');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(info), 'Match');
+  XLSX.writeFile(wb, fileBase() + '.xlsx');
+};
+const toCsv = rows => '﻿' + rows.map(r => r.map(v => /[;"\n]/.test(String(v)) ? '"' + String(v).replace(/"/g,'""') + '"' : v).join(';')).join('\n');
+$('b-csv').onclick = () => {
+  const { recap, mv } = tables();
+  download(new Blob([toCsv(recap)], { type:'text/csv' }), fileBase() + '_temps.csv');
+  setTimeout(() => download(new Blob([toCsv(mv)], { type:'text/csv' }), fileBase() + '_mouvements.csv'), 600);
+};
+$('b-copy').onclick = async () => {
+  const { recap, mv } = tables();
+  const txt = recap.map(r => r.join('\t')).join('\n') + '\n\n' + mv.map(r => r.join('\t')).join('\n');
+  try{ await navigator.clipboard.writeText(txt); toast('Copié : colle dans LibreOffice'); }
+  catch(e){ toast('Copie refusée par le navigateur'); }
+};
+$('b-return').onclick = () => { S.screen = 'match'; save(); render(); };
+$('b-new').onclick = e => armed(e.currentTarget, 'Confirmer : effacer ce match', () => { S = newMatch(); save(); render(); });
+
+function renderFin(){
+  $('f-kicker').textContent = S.finished ? 'Fin de match' : 'Export en cours de match';
+  $('f-title').textContent = S.team + (S.adv ? ' – ' + S.adv : '');
+  const { recap } = tables();
+  const rows = recap.slice(1).sort((a,b) => b[7] - a[7]);
+  $('f-table').innerHTML = '<tr><th>N°</th><th>Nom</th><th class="r">1re</th><th class="r">2e</th><th class="r">Total</th></tr>' +
+    rows.map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}${r[3]==='OUI'?'<span class="gk">G</span>':''}</td><td class="r">${r[4]}</td><td class="r">${r[5]}</td><td class="r"><b>${r[6]}</b></td></tr>`).join('');
+  $('f-note').textContent = 'Fichier : ' + fileBase() + '.xlsx · onglets Temps de jeu, Entrées-Sorties, Match.';
+}
+
+// ================= AFFICHAGE GÉNÉRAL =================
+function render(){
+  $('v-setup').hidden = S.screen !== 'setup';
+  $('v-match').hidden = S.screen !== 'match';
+  $('v-fin').hidden = S.screen !== 'fin';
+  if (S.screen === 'setup') renderSetup();
+  if (S.screen === 'match'){ buildGrid(); renderMatch(); }
+  if (S.screen === 'fin') renderFin();
+  window.scrollTo(0,0);
+}
+
+setInterval(() => {
+  if (S.running && elapsed() >= HALF){        // fin automatique à 00:00
+    S.base = HALF; S.running = false; push({ type:'stop', t:HALF }); vibrate([200,100,200]); toast('00:00 · fin de période');
+  }
+  if (S.screen === 'match') renderMatch();
+}, 250);
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible'){ if (S.running) keepAwake(); if (S.screen === 'match') renderMatch(); }
+  else save();
+});
+render();
+</script>
+
+</body>
+</html>
